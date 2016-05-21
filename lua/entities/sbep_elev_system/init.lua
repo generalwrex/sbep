@@ -30,9 +30,13 @@ function ENT:Initialize()
 	self.FT  = {} --Floor Table
 	self.HT  = {} --Hatch Table
 	
-	self.Usable = self.Usable or true
+	if self.Usable == nil then
+		self.Usable = true
+		self.ST.Usable = true
+	else
+		self.ST.Usable = self.Usable
+	end
 	self:SetSystemSize( "S" )
-	self.ST.Usable = self.Usable or true
 	self.ST.Skin   = self.Skin or 0
 	
 	self.Entity:SetNetworkedInt( "ActivePart" , 1 )
@@ -207,7 +211,7 @@ function ENT:Think()
 	end
 	
 	if self.THD > 0 and CurTime() < ( self.THST + self.THD ) then
-		WireLib.TriggerOutput( self , "Holding" , 1 )
+		if WireAddon then WireLib.TriggerOutput( self , "Holding" , 1 ) end
 		return true
 	elseif self.THD > 0 and CurTime() > ( self.THST + self.THD ) then
 		self.THD = 0
@@ -215,7 +219,7 @@ function ENT:Think()
 			self:AddHoldDelay( 2 )
 		end
 		self.IsHolding = false
-		WireLib.TriggerOutput( self , "Holding" , 0 )
+		if WireAddon then WireLib.TriggerOutput( self , "Holding" , 0 ) end
 	end
 
 	if self.ATL then return true end
@@ -234,7 +238,7 @@ function ENT:Think()
 
 	if F ~= self.OldCF then
 		self.ST.CF = F
-		WireLib.TriggerOutput( self , "Floor" , self.ST.CF )
+		if WireAddon then WireLib.TriggerOutput( self , "Floor" , self.ST.CF ) end
 	end
 	self.OldCF = self.ST.CF
 	
@@ -253,7 +257,7 @@ end
 
 function ENT:PhysicsSimulate( phys, deltatime )
 
-	if !self.LiftActive or !self.PT then return SIM_NOTHING end
+	if !self.LiftActive or !self.PT or !IsValid(self.PT[1]) or !IsValid(self.PT[self:GetPartCount()]) then return SIM_NOTHING end
 
 	local Pos1 = self.PT[1]:GetPos()
 	local Pos2 = self.PT[self:GetPartCount()]:GetPos()
@@ -388,7 +392,27 @@ function ENT:FinishSystem()
 	self:AddCallFloorNum( 1 )
 	
 	self.LiftActive = true
+	
+	local ply = self.Entity:GetOwner()
+	undo.Create( "SBEP Lift System" )
+		undo.AddEntity( self )
+		for _,P in ipairs( self.PT ) do
+			undo.AddEntity( P )
+			if P.PD and P.PD.FDT then
+				for _,D in ipairs( P.PD.FDT ) do
+					undo.AddEntity( D )
+				end
+			end
+		end
+		for _,P in ipairs( self.HT ) do
+			undo.AddEntity( P )
+		end
+		undo.SetPlayer( ply )
+	undo.Finish()
 
+	self:SetOwner(nil)
+	self:SetPlayer(ply)
+	self.Owner = ply
 end
 
 function ENT:CreateHatches()		--Creating Hatches. Each Hatch is paired with the part below it, so the top part has no hatch associated.
@@ -520,6 +544,9 @@ function ENT:CalcPanelModel( PartNum )
 end
 
 function ENT:MakeWire( bAdjust ) --Adds the appropriate wire inputs.
+
+	if(not WireAddon) then return end
+	
 	self.SBEP_WireInputsTable = {}
 	self.SBEP_WireInputsTable[1] = "FloorNum"
 	for k,v in ipairs( self.FT ) do
@@ -626,7 +653,7 @@ function ENT:PostEntityPaste(pl, Ent, CreatedEntities)
 	
 	self:MakeWire()
 	
-	if(Ent.EntityMods and DT.WireData) then
+	if(Ent.EntityMods and DT.WireData and WireAddon) then
 		WireLib.ApplyDupeInfo( pl, Ent, DT.WireData, function(id) return CreatedEntities[id] end)
 	end
 	
